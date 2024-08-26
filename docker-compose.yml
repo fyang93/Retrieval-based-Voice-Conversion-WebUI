@@ -5,12 +5,20 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: rvc
+    environment:
+      - LC_ALL=zh_CN.UTF-8
+      - LANG=zh_CN.UTF-8
+      - LANGUAGE=zh_CN.UTF-8
     volumes:
       - ./weights:/app/assets/weights
       - ./opt:/app/opt
-      # - ./dataset:/app/dataset # you can use this folder in order to provide your dataset for model training
+      - ./logs:/app/logs
+      - ./dataset:/app/dataset # you can use this folder in order to provide your dataset for model training
+      - ./api.py:/app/api.py
     ports:
       - 7865:7865
+      - 50001:5000
+    shm_size: 16G
     deploy:
       resources:
         reservations:
@@ -18,3 +26,4 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    command: python3 api.py
