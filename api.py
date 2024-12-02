@@ -16,10 +16,11 @@ import logging
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
 from scipy.io.wavfile import write
 import numpy as np
 import io
+import uvicorn
+import time
 
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ warnings.filterwarnings("ignore")
 torch.manual_seed(114514)
 
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from scipy.io.wavfile import read, write
 import numpy as np
@@ -41,16 +42,16 @@ import io
 
 app = FastAPI()
 
-def convert_audio(input_audio_path):
+def convert_audio(input_audio_path, pitch_shift=0, retrieval_ratio=0.75):
     # 示例变声函数，简单反转音频数据
     log, converted = vc.vc_single(0, # 说话人ID
                 input_audio_path, # 待转换音频路径
-                0, # 变调，升八度-12，降八度12
+                pitch_shift, # 变调，升八度-12，降八度12
                 "", # F0曲线文件
                 "rmvpe", # 音高提取算法
                 "logs/lutao/added_IVF2435_Flat_nprobe_1_lutao_v2.index", # 特征检索文件路径
                 "null", # 不使用
-                0.75, # 检索特征占比
+                retrieval_ratio, # 检索特征占比
                 3, # 滤波半径
                 0, # 不进行重采样
                 0.25, # 输入源音量包络替换输出音量包络融合比例，越靠近1越使用输出包络
@@ -59,8 +60,11 @@ def convert_audio(input_audio_path):
     print(log)
     return converted
 
-@app.post("/convert_audio")
-async def convert_audio_endpoint(file: UploadFile = File(...)):
+@app.post("/api/convert")
+async def convert_audio_endpoint(file: UploadFile = File(...),
+                                 pitch: int = Form(0),
+                                 ratio: float = Form(0.75)):
+    start = time.time()
     if not file.content_type.startswith('audio/'):
         raise HTTPException(status_code=400, detail="File must be an audio file")
 
@@ -70,17 +74,26 @@ async def convert_audio_endpoint(file: UploadFile = File(...)):
     with open(input_audio_path, 'wb') as f:
         f.write(await file.read())
     
-    sample_rate, converted_audio_data = convert_audio(input_audio_path)
+    print(f"保存文件用时: {time.time() - start}s")
+    start = time.time()
+
+    sample_rate, converted_audio_data = convert_audio(input_audio_path,
+                                                      pitch,
+                                                      ratio)
+
+    print(f"换声用时: {time.time() - start}s")
+    start = time.time()
 
     # 将变声后的音频数据写入一个内存字节流
     buffer = io.BytesIO()
     write(buffer, sample_rate, converted_audio_data)
     buffer.seek(0)
 
+    print(f"构造字节用时: {time.time() - start}s")
+
     return StreamingResponse(buffer, media_type="audio/wav", headers={"Content-Disposition": "attachment; filename=output.wav"})
 
 if __name__ == '__main__':
-    import uvicorn
     config = Config()
     vc = VC(config)
     vc.get_vc('lutao.pth', 0.33, 0.33)

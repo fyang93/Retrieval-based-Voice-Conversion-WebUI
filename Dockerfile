@@ -9,7 +9,8 @@ WORKDIR /app
 COPY . .
 
 # Install dependenceis to add PPAs
-RUN apt-get update && \
+RUN echo "Acquire::Check-Valid-Until \"false\";\nAcquire::Check-Date \"false\";" | cat > /etc/apt/apt.conf.d/10no--check-valid-until && \
+    apt-get update && \
     apt-get install -y -qq ffmpeg aria2 && apt clean && \
     apt-get install -y software-properties-common && \
     apt-get clean && \
